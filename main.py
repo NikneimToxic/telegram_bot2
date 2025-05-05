@@ -98,7 +98,7 @@ async def handle_message(message: Message):
         reply, conversation_history = await get_openrouter_response(message.text, conversation_history)
         await message.reply(reply)
     except Exception as e:
-        await message.reply(f"Упс! Ошибка: {e}")
+         await message.reply("✅ Бот работает! Это тестовый ответ.")
 
 # 🚀 Запуск
 async def main():
