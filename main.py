@@ -10,8 +10,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import Message, ChatMemberUpdated
 
 # 🔐 Вставь свои токены
-TELEGRAM_TOKEN = "вставь_свой_токен_сюда"
-OPENROUTER_API_KEY = "вставь_свой_api_ключ_сюда"
+TELEGRAM_TOKEN = "7991964078:AAH52l2MVnbjtoQlU76AVJpBt7-2SJW1Nko"
+OPENROUTER_API_KEY = "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"
 
 # 🤖 Инициализация бота
 bot = Bot(
