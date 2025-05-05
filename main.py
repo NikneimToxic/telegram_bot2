@@ -10,8 +10,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import Message, ChatMemberUpdated
 
 # 🔐 Вставь свои токены
-TELEGRAM_TOKEN = "7991964078:AAH52l2MVnbjtoQlU76AVJpBt7-2SJW1Nko"
-OPENROUTER_API_KEY = "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"
+TELEGRAM_TOKEN = "вставь_свой_токен_сюда"
+OPENROUTER_API_KEY = "вставь_свой_api_ключ_сюда"
 
 # 🤖 Инициализация бота
 bot = Bot(
@@ -28,9 +28,6 @@ jokes = [
     "Программисты не спят, они просто в режиме ожидания."
 ]
 
-# 📜 История переписки
-conversation_history = []
-
 # 🧠 Получение ответа от OpenRouter GPT с историей
 async def get_openrouter_response(user_message: str, conversation_history: list) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -38,7 +35,6 @@ async def get_openrouter_response(user_message: str, conversation_history: list)
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
-
     conversation_history.append({"role": "user", "content": user_message})
 
     json_data = {
@@ -48,20 +44,13 @@ async def get_openrouter_response(user_message: str, conversation_history: list)
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, headers=headers, json=json_data) as resp:
-            try:
-                result = await resp.json()
-                logging.info(f"Ответ OpenRouter: {result}")  # логируем ответ
+            result = await resp.json()
+            reply = result['choices'][0]['message']['content']
 
-                if "choices" not in result:
-                    error_message = result.get("error", {}).get("message", "Неизвестная ошибка")
-                    raise ValueError(f"Ошибка OpenRouter: {error_message}")
+            # Добавляем ответ ChatGPT в историю
+            conversation_history.append({"role": "assistant", "content": reply})
 
-                reply = result["choices"][0]["message"]["content"]
-                conversation_history.append({"role": "assistant", "content": reply})
-
-                return reply, conversation_history
-            except Exception as e:
-                raise RuntimeError(f"Ошибка при запросе к OpenRouter: {e}")
+            return reply, conversation_history
 
 # 📌 Команда /анекдот
 @dp.message(F.text.lower() == "/анекдот")
@@ -71,12 +60,50 @@ async def send_joke(message: Message):
 # 📌 Команда /помощь
 @dp.message(F.text.lower() == "/помощь")
 async def send_help(message: Message):
-    @dp.message(F.text.lower() == "/помощь")
-async def send_help(message: Message):
     help_text = (
-        "🤖 Я — умный Telegram бот!\n\n"
-        "• Просто напиши что-то — и я отвечу через GPT\n"
-        "• /анекдот — получи шутку\n"
-        "• /помощь — покажу это меню"
+        "👋 Я весёлый бот для чата!\n\n"
+        "Вот что я умею:\n"
+        "• Отвечаю на сообщения с помощью ИИ (ChatGPT)\n"
+        "• /анекдот — расскажу шутку\n"
+        "• /помощь — покажу это меню\n"
+        "• Реагирую на 'бот ты тут?' 😄\n"
+        "• Приветствую новых участников"
     )
     await message.reply(help_text)
+
+# 🔍 Реакция на упоминание бота
+@dp.message(F.text.lower().contains("бот"))
+async def reply_to_bot_mention(message: Message):
+    if "ты где" in message.text.lower() or "тут" in message.text.lower():
+        await message.reply("Я тут! Не сплю 😄")
+
+# 👋 Приветствие новых участников
+@dp.chat_member()
+async def greet_new_member(update: ChatMemberUpdated):
+    old = update.old_chat_member
+    new = update.new_chat_member
+
+    if old.status in ("left", "kicked") and new.status == "member":
+        user = new.user
+        welcome_text = f"👋 Добро пожаловать, <b>{user.full_name}</b>!\nРассаживайся поудобнее 😄"
+        await bot.send_message(update.chat.id, welcome_text)
+
+# 🤖 Ответ по умолчанию через GPT с историей
+conversation_history = []
+
+@dp.message()
+async def handle_message(message: Message):
+    global conversation_history
+    try:
+        reply, conversation_history = await get_openrouter_response(message.text, conversation_history)
+        await message.reply(reply)
+    except Exception as e:
+        await message.reply(f"Упс! Ошибка: {e}")
+
+# 🚀 Запуск
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
