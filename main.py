@@ -1,59 +1,108 @@
 import logging
 import aiohttp
 import asyncio
-import os
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+import random
+
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
-from aiogram.utils.markdown import hbold
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
-from aiogram import Router
-from dotenv import load_dotenv
+from aiogram.types import Message, ChatMemberUpdated
 
-load_dotenv()
+# 🔐 Вставь свои токены
+TELEGRAM_TOKEN = "7991964078:AAH52l2MVnbjtoQlU76AVJpBt7-2SJW1Nko"
+OPENROUTER_API_KEY = "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"
 
-TELEGRAM_TOKEN = os.getenv("7991964078:AAH52l2MVnbjtoQlU76AVJpBt7-2SJW1Nko")
-OPENROUTER_API_KEY = os.getenv("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")
+# 🤖 Инициализация бота
+bot = Bot(
+    token=TELEGRAM_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+dp = Dispatcher(storage=MemoryStorage())
 
-if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN is missing from the environment variables!")
+# 😂 Список анекдотов
+jokes = [
+    "Почему программисты путают Хэллоуин и Рождество? Потому что 31 Oct = 25 Dec.",
+    "Я сказал жене, что её код — спагетти. Теперь я ужинаю один.",
+    "Бот сломался... но не сдался! 🤖",
+    "Программисты не спят, они просто в режиме ожидания."
+]
 
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY is missing from the environment variables!")
-
-bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()
-router = Router()
-dp.include_router(router)
-
-logging.basicConfig(level=logging.INFO)
-
-async def get_openrouter_response(user_message):
+# 🧠 Получение ответа от OpenRouter GPT с историей
+async def get_openrouter_response(user_message: str, conversation_history: list) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
+    conversation_history.append({"role": "user", "content": user_message})
+
     json_data = {
         "model": "openai/gpt-3.5-turbo",
-        "messages": [
-            {"role": "user", "content": user_message}
-        ]
+        "messages": conversation_history
     }
+
     async with aiohttp.ClientSession() as session:
         async with session.post(url, headers=headers, json=json_data) as resp:
             result = await resp.json()
-            if "choices" in result and len(result["choices"]) > 0:
-                return result["choices"][0]["message"]["content"]
-            else:
-                return "Извините, произошла ошибка при обработке вашего запроса."
+            reply = result['choices'][0]['message']['content']
 
-@router.message()
+            # Добавляем ответ ChatGPT в историю
+            conversation_history.append({"role": "assistant", "content": reply})
+
+            return reply, conversation_history
+
+# 📌 Команда /анекдот
+@dp.message(F.text.lower() == "/анекдот")
+async def send_joke(message: Message):
+    await message.reply(random.choice(jokes))
+
+# 📌 Команда /помощь
+@dp.message(F.text.lower() == "/помощь")
+async def send_help(message: Message):
+    text = (
+        "👋 Я весёлый бот для чата!\n\n"
+        "Вот что я умею:\n"
+        "• Отвечаю на сообщения с помощью ИИ (ChatGPT)\n"
+        "• /анекдот — расскажу шутку\n"
+        "• /помощь — покажу это меню\n"
+        "• Реагирую на 'бот ты тут?' 😄\n"
+        "• Приветствую новых участников"
+    )
+    await message.reply(text)
+
+# 🔍 Реакция на упоминание бота
+@dp.message(F.text.lower().contains("бот"))
+async def reply_to_bot_mention(message: Message):
+    if "ты где" in message.text.lower() or "тут" in message.text.lower():
+        await message.reply("Я тут! Не сплю 😄")
+
+# 👋 Приветствие новых участников
+@dp.chat_member()
+async def greet_new_member(update: ChatMemberUpdated):
+    old = update.old_chat_member
+    new = update.new_chat_member
+
+    if old.status in ("left", "kicked") and new.status == "member":
+        user = new.user
+        welcome_text = f"👋 Добро пожаловать, <b>{user.full_name}</b>!\nРассаживайся поудобнее 😄"
+        await bot.send_message(update.chat.id, welcome_text)
+
+# 🤖 Ответ по умолчанию через GPT с историей
+conversation_history = []
+
+@dp.message()
 async def handle_message(message: Message):
-    reply = await get_openrouter_response(message.text)
-    await message.reply(reply)
+    global conversation_history
+    try:
+        reply, conversation_history = await get_openrouter_response(message.text, conversation_history)
+        await message.reply(reply)
+    except Exception as e:
+        await message.reply(f"Упс! Ошибка: {e}")
 
+# 🚀 Запуск
 async def main():
+    logging.basicConfig(level=logging.INFO)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
